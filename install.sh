@@ -10,7 +10,7 @@
 
 
 """:"
-SSH_ADDRESS=$1 # leave blank to install locally (if DEF_SSH_ADDRESS is also blank)
+SSH_ADDRESS=$1 # leave blank to install locally (if DEF_SSH_ADDRESS is also blank), or set to "-" to force installing locally
 INSTALL_DIR=$2 # absolute path to copy project to
 INSTALL=$3 # ('true' | 'false') whether or not to run install_prereqs.sh & setup.sh and install systemd-units after copying files
 
@@ -37,6 +37,10 @@ DEF_SSH_ADDRESS=""
 # if no parameter was passed
 if [ -z "$SSH_ADDRESS" ]; then
   SSH_ADDRESS=$DEF_SSH_ADDRESS
+fi
+# for forcing local installation
+if [ "$SSH_ADDRESS" = "-" ]; then
+  SSH_ADDRESS=""
 fi
 
 # if no parameter was passed
@@ -103,7 +107,7 @@ if ! [ -z "$SSH_ADDRESS" ];then
     notify "Re-Running this installer on remote machine." $BLUE
     echo ""
     # run this script on remote host to install this project there
-    ssh $SSH_ADDRESS -t "$INSTALL_DIR/$REL_SCRIPT_PATH '' $INSTALL_DIR $INSTALL"
+    ssh $SSH_ADDRESS -t "$INSTALL_DIR/$REL_SCRIPT_PATH '-' $INSTALL_DIR $INSTALL"
   fi
     
   exit 0 # exit this script to avoid installing locally
