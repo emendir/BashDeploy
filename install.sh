@@ -17,6 +17,7 @@ DEF_INSTALL_DIR="/opt/$PROJ_NAME"
 DEF_SSH_ADDRESS=""
 DEF_WITH_SYSTEMD=true
 DEF_ENABLE_UNITS=true
+DEF_EXCLUDE_FILE="$SCRIPT_DIR/.gitignore"
 
 # Load config file if present
 CONFIG_FILE="$SCRIPT_DIR/installer.conf"
@@ -58,7 +59,7 @@ INSTALL_DIR="$DEF_INSTALL_DIR"
 WITH_SYSTEMD="$DEF_WITH_SYSTEMD"
 ENABLE_UNITS="$DEF_ENABLE_UNITS"
 SSH_OPTS="${SSH_OPTS:-}"
-
+EXCLUDE_FILE=$DEF_EXCLUDE_FILE
 usage() {
 cat <<EOF
 Usage: $0 [OPTIONS]
@@ -66,6 +67,7 @@ Usage: $0 [OPTIONS]
 Options:
   --remote <user@host>   Install on remote machine via SSH
   --dir <path>           Installation directory (default: $DEF_INSTALL_DIR)
+  --exclude-from <path>  Installation directory (default: $DEF_EXCLUDE_FILE)
   --with-systemd         Install systemd units (default: $DEF_WITH_SYSTEMD)
   --no-systemd           Skip systemd unit installation
   --enable-units         Enable and start systemd units (default: $DEF_ENABLE_UNITS)
@@ -80,6 +82,8 @@ while [[ $# -gt 0 ]]; do
       SSH_ADDRESS="$2"; shift 2;;
     --dir)
       INSTALL_DIR="$2"; shift 2;;
+    --exclude-from)
+      EXCLUDE_FILE="$2"; shift 2;;
     --with-systemd)
       WITH_SYSTEMD=true; shift;;
     --no-systemd)
@@ -95,6 +99,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+EXCLUDE_FILE=$(readlink -f $EXCLUDE_FILE)
+if ! [ -e $EXCLUDE_FILE ]; then
+  touch $EXCLUDE_FILE
+fi
+
 ##############################################
 # REMOTE INSTALL HANDLING
 ##############################################
@@ -105,7 +114,7 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   ssh $SSH_OPTS "$SSH_ADDRESS" "mkdir -p '$INSTALL_DIR'"
 
   # Copy project files over
-  rsync -a --delete -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
+  rsync -a --delete --exclude-from=$EXCLUDE_FILE -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
 
   # Re-run installer remotely
   ssh $SSH_OPTS "$SSH_ADDRESS" "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' \
@@ -119,7 +128,7 @@ fi
 ##############################################
 notify "Installing locally into $INSTALL_DIR"
 sudo mkdir -p "$INSTALL_DIR"
-sudo rsync -a --delete "$SCRIPT_DIR/" "$INSTALL_DIR/"
+sudo rsync -a --delete --exclude-from=$EXCLUDE_FILE "$SCRIPT_DIR/" "$INSTALL_DIR/"
 
 # Run post-copy hooks
 run_hook_dir "$HOOKS_DIR/post_copy.d"
@@ -128,6 +137,9 @@ run_hook_dir "$HOOKS_DIR/post_copy.d"
 ##############################################
 # SYSTEMD UNIT HANDLING
 ##############################################
+if ! [ -e $SYSTEMD_DIR ]; then
+  WITH_SYSTEMD=false
+fi
 if [[ "$WITH_SYSTEMD" == true ]]; then
   notify "Installing systemd units"
 
@@ -146,7 +158,7 @@ if [[ "$WITH_SYSTEMD" == true ]]; then
       fi
     done
   done
-
+  systemctl daemon-reload
   if [[ "$ENABLE_UNITS" == true ]]; then
     notify "Enabling and starting units"
     for scope in system user; do
