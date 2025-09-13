@@ -9,13 +9,15 @@
 ##   c) install all systemd unit files in $SYSTEMD_UNITS_DIR
 
 
-""":"
+set -e # Exit if any command fails
+set -o pipefail
+
 SSH_ADDRESS=$1 # leave blank to install locally (if DEF_SSH_ADDRESS is also blank), or set to "-" to force installing locally
 INSTALL_DIR=$2 # absolute path to copy project to
 INSTALL=$3 # ('true' | 'false') whether or not to run install_prereqs.sh & setup.sh and install systemd-units after copying files
 
 # the absolute paths of this script and it's directory
-SCRIPT_PATH=$(realpath -s "$0") # DON'T EDIT - must be absolute paths
+SCRIPT_PATH=$(readlink -f "$0") # DON'T EDIT - must be absolute paths
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH") # DON'T EDIT - must be absolute paths
 
 PROJ_NAME=$(basename $SCRIPT_DIR)
@@ -27,11 +29,16 @@ SYSTEMD_UNITS_DIR="systemd_units" # path relative to PROJ_DIR which contains sys
 DEF_INSTALL_DIR=/opt/$PROJ_NAME
 # whether or not to run the installer
 # on the remote system after copying over the files
-DEF_INSTALL=1 
+DEF_INSTALL=true 
 # leave blank to install locally if user doesn't specify SSH_ADDRESS
 DEF_SSH_ADDRESS=""
 
-
+# normalise value of INSTALL
+case "$INSTALL" in
+  1|true|yes) INSTALL=1 ;;
+  0|false|no) INSTALL=0 ;;
+  *) INSTALL=$DEF_INSTALL ;;
+esac
 
 
 # if no parameter was passed
@@ -96,7 +103,7 @@ if ! [ -z "$SSH_ADDRESS" ];then
   username=$(echo $SSH_ADDRESS | awk -F "@" '{print $1}')
   notify "Creating remote directory..." $MAGENTA
   # create install dir if not existant
-  ssh $SSH_ADDRESS -t "if ! [ -d $INSTALL_DIR ]; then sudo mkdir -p $INSTALL_DIR;  sudo chown $username:$username $INSTALL_DIR; fi;"
+  ssh $SSH_ADDRESS -t "bash 'if ! [ -d $INSTALL_DIR ]; then sudo mkdir -p $INSTALL_DIR;  sudo chown $username:$username $INSTALL_DIR; fi;'"
 
   notify "Copying files to remote directory..." $MAGENTA
   # copy project files to install dir on remote host
@@ -107,7 +114,7 @@ if ! [ -z "$SSH_ADDRESS" ];then
     notify "Re-Running this installer on remote machine." $BLUE
     echo ""
     # run this script on remote host to install this project there
-    ssh $SSH_ADDRESS -t "$INSTALL_DIR/$REL_SCRIPT_PATH '-' $INSTALL_DIR $INSTALL"
+    ssh "$SSH_ADDRESS" -t "bash '$INSTALL_DIR/$REL_SCRIPT_PATH' '-' '$INSTALL_DIR' '$INSTALL'"
   fi
     
   exit 0 # exit this script to avoid installing locally
@@ -119,7 +126,6 @@ Installing to:  $INSTALL_DIR
 Project source: $PROJ_DIR" $MAGENTA
 
 cd $SCRIPT_DIR
-set -e # Exit if any command fails
 
 
 
@@ -146,18 +152,23 @@ if [ "$INSTALL" -eq 1 ]; then
   notify "Installing Systemd services and timers..." $MAGENTA
   SYSD="$INSTALL_DIR/$SYSTEMD_UNITS_DIR" # get dir containing unit files
   if [ -e $SYSD ];then
-    # Loop through systemd unit files
+    # copy systemd unit files
+    for unit in "$SYSD"/*.service "$SYSD"/*.timer "$SYSD"/*.socket "$SYSD"/*.target "$SYSD"/*.mount "$SYSD"/*.automount "$SYSD"/*.path "$SYSD"/*.device "$SYSD"/*.swap "$SYSD"/*.slice "$SYSD"/*.scope; do
+        # Skip if no matching files
+        [ -e "$unit" ] || continue
+
+        # Copy to systemd directory
+        sudo cp "$unit" /etc/systemd/system/
+    done
+    # Reload systemd to recognize new units
+    sudo systemctl daemon-reexec
+    sudo systemctl daemon-reload
+
+    # enable and restart systemd units
     for unit in "$SYSD"/*.service "$SYSD"/*.timer "$SYSD"/*.socket "$SYSD"/*.target "$SYSD"/*.mount "$SYSD"/*.automount "$SYSD"/*.path "$SYSD"/*.device "$SYSD"/*.swap "$SYSD"/*.slice "$SYSD"/*.scope; do
         # Skip if no matching files
         [ -e "$unit" ] || continue
         echo -e "${MAGENTA}- $(basename "$unit")${NC}"
-
-        # Copy to systemd directory
-        sudo cp "$unit" /etc/systemd/system/
-
-        # Reload systemd to recognize new unit
-        sudo systemctl daemon-reexec
-        sudo systemctl daemon-reload
 
         # Enable and start the unit, restarting if already existant
         sudo systemctl enable "$(basename "$unit")"
@@ -173,39 +184,3 @@ fi
 
 notify "Done!" $MAGENTA
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-exit 0
-"""
-import os
-import sys
-
-# Python: re-execute the script in Bash
-os.execvp('bash', ['bash', __file__] + sys.argv[1:])
-
-#"
