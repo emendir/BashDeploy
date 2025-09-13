@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-## Generic project installer
+## BashDeploy: Generic project installer
 set -euo pipefail
 
 ##############################################
@@ -62,6 +62,8 @@ SSH_OPTS="${SSH_OPTS:-}"
 EXCLUDE_FILE=$DEF_EXCLUDE_FILE
 usage() {
 cat <<EOF
+BashDeploy
+
 Usage: $0 [OPTIONS]
 
 Options:
@@ -73,6 +75,9 @@ Options:
   --enable-units         Enable and start systemd units (default: $DEF_ENABLE_UNITS)
   --no-enable-units      Do not enable/start units after install
   --help                 Show this help
+
+Find out more at:
+https://github.com/emendir/BashDeploy
 EOF
 }
 

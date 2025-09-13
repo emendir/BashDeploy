@@ -1,4 +1,4 @@
-# Project Installer
+# BashDeploy
 
 An extensible drop-in installer script written in bash for software projects.
 
