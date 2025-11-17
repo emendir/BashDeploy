@@ -59,6 +59,7 @@ INSTALL_DIR="$DEF_INSTALL_DIR"
 WITH_SYSTEMD="$DEF_WITH_SYSTEMD"
 ENABLE_UNITS="$DEF_ENABLE_UNITS"
 SSH_OPTS="${SSH_OPTS:-}"
+COPY_ONLY="${COPY_ONLY:-}"
 EXCLUDE_FILE=$DEF_EXCLUDE_FILE
 usage() {
 cat <<EOF
@@ -74,6 +75,7 @@ Options:
   --no-systemd           Skip systemd unit installation
   --enable-units         Enable and start systemd units (default: $DEF_ENABLE_UNITS)
   --no-enable-units      Do not enable/start units after install
+  --only-copy            Only copy files to installation target, without running setup/installation scripts
   --help                 Show this help
 
 Find out more at:
@@ -97,6 +99,8 @@ while [[ $# -gt 0 ]]; do
       ENABLE_UNITS=true; shift;;
     --no-enable-units)
       ENABLE_UNITS=false; shift;;
+    --copy-only)
+      COPY_ONLY=true; shift;;
     --help)
       usage; exit 0;;
     *)
@@ -121,11 +125,16 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   # Copy project files over
   rsync -a --delete --exclude-from=$EXCLUDE_FILE -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
 
-  # Re-run installer remotely
-  ssh $SSH_OPTS "$SSH_ADDRESS" -t "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' \
-    $([[ $WITH_SYSTEMD == true ]] && echo --with-systemd || echo --no-systemd) \
-    $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units)"
-  exit 0
+  if [[ $COPY_ONLY != true ]];then
+    # Re-run installer remotely
+    ssh $SSH_OPTS "$SSH_ADDRESS" -t "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' \
+      $([[ $WITH_SYSTEMD == true ]] && echo --with-systemd || echo --no-systemd) \
+      $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units)"
+    exit 0
+  else
+    notify "Not installing on remote machine because --copy-only is set."
+    exit 0
+  fi
 fi
 
 ##############################################
