@@ -163,7 +163,7 @@ if [[ "$WITH_SYSTEMD" == true ]]; then
       fi
     done
   done
-  systemctl daemon-reload
+  sudo systemctl daemon-reload
   if [[ "$ENABLE_UNITS" == true ]]; then
     notify "Enabling and starting units"
     for scope in system user; do
