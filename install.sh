@@ -116,13 +116,13 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   notify "Installing remotely on $SSH_ADDRESS"
 
   # Ensure target directory exists and is owned by the remote user
-  ssh $SSH_OPTS "$SSH_ADDRESS" "mkdir -p '$INSTALL_DIR'"
+  ssh $SSH_OPTS "$SSH_ADDRESS" -t "sudo mkdir -p '$INSTALL_DIR' && sudo chown \$USER:\$USER '$INSTALL_DIR'"
 
   # Copy project files over
   rsync -a --delete --exclude-from=$EXCLUDE_FILE -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
 
   # Re-run installer remotely
-  ssh $SSH_OPTS "$SSH_ADDRESS" "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' \
+  ssh $SSH_OPTS "$SSH_ADDRESS" -t "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' \
     $([[ $WITH_SYSTEMD == true ]] && echo --with-systemd || echo --no-systemd) \
     $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units)"
   exit 0
@@ -186,3 +186,4 @@ if [[ "$WITH_SYSTEMD" == true ]]; then
 fi
 
 notify "Installation complete"
+
