@@ -123,7 +123,7 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   ssh $SSH_OPTS "$SSH_ADDRESS" -t "sudo mkdir -p '$INSTALL_DIR' && sudo chown \$USER:\$USER '$INSTALL_DIR'"
 
   # Copy project files over
-  rsync -a --delete --exclude-from=$EXCLUDE_FILE -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
+  rsync -a $RSYNC_OPTS --delete --exclude-from=$EXCLUDE_FILE -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
 
   if [[ $COPY_ONLY != true ]];then
     # Re-run installer remotely
@@ -142,7 +142,7 @@ fi
 ##############################################
 notify "Installing locally into $INSTALL_DIR"
 sudo mkdir -p "$INSTALL_DIR"
-sudo rsync -a --delete --exclude-from=$EXCLUDE_FILE "$SCRIPT_DIR/" "$INSTALL_DIR/"
+sudo rsync -a $RSYNC_OPTS --delete --exclude-from=$EXCLUDE_FILE "$SCRIPT_DIR/" "$INSTALL_DIR/"
 
 # Run post-copy hooks
 run_hook_dir "$HOOKS_DIR/post_copy.d"

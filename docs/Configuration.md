@@ -23,6 +23,7 @@ The installer defines defaults in the script as `DEF_<NAME>` and then reads (sou
 Other useful variables that the script respects or that you may want to export for hooks:
 
 * `SSH_OPTS` — extra options passed to `ssh`/`rsync` (export or set before invoking the installer; the script reads `SSH_OPTS` via parameter expansion)
+* `RSYNC_OPTS` — extra options passed to `rsync` (export or set before invoking the installer; the script reads `RSYNC_OPTS` via parameter expansion)
 
 **Example `installer.conf`:**
 

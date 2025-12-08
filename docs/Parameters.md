@@ -30,7 +30,7 @@ _This file documents every CLI option exposed by `install.sh`, explains defaults
 * **How it works:**
 
   1. The installer first ensures the remote `$INSTALL_DIR` exists by running `ssh $SSH_OPTS "$SSH_ADDRESS" "mkdir -p '$INSTALL_DIR'"`.
-  2. It then uses `rsync -a --delete -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"` to copy the project to the remote host.
+  2. It then uses `rsync -a $RSYNC_OPTS --delete -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"` to copy the project to the remote host.
   3. Finally it re‑executes the installer remotely by running `ssh $SSH_OPTS "$SSH_ADDRESS" "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' [--with-systemd|--no-systemd] [--enable-units|--no-enable-units]"`.
 * **Notes/Recommendations:**
 
@@ -70,6 +70,7 @@ Displays usage and exits.
 ## Environment variables the installer reads (without modifying the script)
 
 * **`SSH_OPTS`** — optional. Any additional options passed to `ssh`/`rsync -e` (for example `-i /path/to/key -p 2222 -o "StrictHostKeyChecking=no"`). The script reads `SSH_OPTS` and inserts it into `ssh` and `rsync` commands.
+* **`RSYNC_OPTS`** — optional. Any additional options passed to `rsync` (for example `-L`). The script reads `RSYNC_OPTS` and inserts it into `rsync` commands.
 
 > Important: other installer variables (for example `INSTALL_DIR`, `WITH_SYSTEMD`, etc.) are assigned inside the script from internal defaults (DEF\_\*). If you want to change those you should either set them in `installer.conf` (the file is sourced), or edit the script. The script does not accept arbitrary environment-variable overrides for every setting.
 
