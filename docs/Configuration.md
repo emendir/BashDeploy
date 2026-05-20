@@ -1,6 +1,6 @@
 `installer.conf` allows you to configure the installer's defaults on a per-project basis. The file, if present, is sourced by `install.sh` early in execution, so it can set variables or export environment for hooks.
 
-**Important security note:** `installer.conf` is *sourced as shell code*. Treat it as executable code: review it before running the installer on untrusted repositories.
+**Important security note:** `installer.conf` is _sourced as shell code_. Treat it as executable code: review it before running the installer on untrusted repositories.
 
 ---
 
@@ -14,16 +14,16 @@ Add `installer.conf` to your project root, next to `install.sh`. The installer w
 
 The installer defines defaults in the script as `DEF_<NAME>` and then reads (sources) `installer.conf`. The following `DEF_*` variables are used by the shipped script and are safe to override in `installer.conf`:
 
-* `DEF_INSTALL_DIR` — default installation directory (default: `/opt/<project>`)
-* `DEF_SSH_ADDRESS` — default remote SSH address (default: empty)
-* `DEF_EXCLUDE_FILE` — default file containing patterns to ignore when copying files to installation directory (default: `.gitignore`)
-* `DEF_WITH_SYSTEMD` — whether to install systemd units by default (`true` or `false`)
-* `DEF_ENABLE_UNITS` — whether to enable & start units by default (`true` or `false`)
+- `DEF_INSTALL_DIR` — default installation directory (default: `/opt/<project>`)
+- `DEF_SSH_ADDRESS` — default remote SSH address (default: empty)
+- `DEF_EXCLUDE_FILE` — default file containing patterns to ignore when copying files to installation directory (default: `.gitignore`)
+- `DEF_WITH_SYSTEMD` — whether to install systemd units by default (`true` or `false`)
+- `DEF_ENABLE_UNITS` — whether to enable & start units by default (`true` or `false`)
 
 Other useful variables that the script respects or that you may want to export for hooks:
 
-* `SSH_OPTS` — extra options passed to `ssh`/`rsync` (export or set before invoking the installer; the script reads `SSH_OPTS` via parameter expansion)
-* `RSYNC_OPTS` — extra options passed to `rsync` (export or set before invoking the installer; the script reads `RSYNC_OPTS` via parameter expansion)
+- `SSH_OPTS` — extra options passed to `ssh`/`rsync` (export or set before invoking the installer; the script reads `SSH_OPTS` via parameter expansion)
+- `RSYNC_OPTS` — extra options passed to `rsync` (export or set before invoking the installer; the script reads `RSYNC_OPTS` via parameter expansion)
 
 **Example `installer.conf`:**
 
@@ -45,5 +45,5 @@ Other useful variables that the script respects or that you may want to export f
 
 ## Security checklist for configuration
 
-* Confirm `installer.conf` and all hook scripts are audited before running installer.
-* Avoid embedding secrets inside `installer.conf` (or ensure `installer.conf` is stored & distributed securely). Prefer to read sensitive values from a secrets manager in hooks.
+- Confirm `installer.conf` and all hook scripts are audited before running installer.
+- Avoid embedding secrets inside `installer.conf` (or ensure `installer.conf` is stored & distributed securely). Prefer to read sensitive values from a secrets manager in hooks.
