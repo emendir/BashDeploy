@@ -1,41 +1,53 @@
-`installer.conf` allows you to configure the installer's defaults on a per-project basis. The file, if present, is sourced by `install.sh` early in execution, so it can set variables or export environment for hooks.
+## Configuration Methods
+
+Parameters can be specified via variables in `installer.conf`, environment variables or (for some) via command line arguments.
+
+### Precedence:
+
+1. command-line arguments (see [Parameters](./Parameters.md))
+2. environment variables (see [Parameters](./Parameters.md))
+3. config-file variables
+
+### Variables
+
+The following variables can be defined as environment variables or in the config-file.
+Config-File definitions take precedence over environment variables.
+
+- `PROJECT_ROOT_DIR` — the root path of the project directory relative to the BashDeploy installer script
+- `PROJECT_NAME` — project name, for computing default install directory (default: the project's root directory's name)
+- `INSTALL_DIR` — installation directory (default: `/opt/<PROJECT_NAME>`)
+- `DEPLOY_DIR` — directory to look for `hooks` and `systemd_units` folders (defail: `./deployment`)
+- `HOOKS_DIR` — directory containing scripts to execute during installation (see [Hooks](./Hooks.md)) (default: `<DEPLOY_DIR>/hooks`)
+- `SYSTEMD_DIR` — directory containing Systemd units (see [SystemdUnits](./SystemdUnits)) (default: `<DEPLOY_DIR>/systemd`)
+- `SSH_ADDRESS` — default remote SSH address (default: empty)
+- `EXCLUDE_FILE` — default file containing patterns to ignore when copying files to installation directory (default: `.gitignore`)
+- `WITH_SYSTEMD` — whether to install systemd units by default (`true` or `false`)
+- `ENABLE_UNITS` — whether to enable & start units by default (`true` or `false`)
+- `SSH_OPTS` — extra options passed to `ssh`/`rsync` (default: empty)
+- `RSYNC_OPTS` — extra options passed to `rsync`, in addition to `-a --delete --exclude-from=<EXCLUDE_FILE>` (default: `-h --info=progress2`)
+
+### Installer Configuration File
+
+`installer.conf` allows you to configure the installer's defaults on a per-project basis.
+The file, if present, is sourced by `install.sh` early in execution, so it can set variables or export environment for hooks.
+
+**WARNING:** Variables in the configuration file override environment variables!
 
 **Important security note:** `installer.conf` is _sourced as shell code_. Treat it as executable code: review it before running the installer on untrusted repositories.
 
----
-
-## Where to place it
-
 Add `installer.conf` to your project root, next to `install.sh`. The installer will load it automatically if the file exists.
-
----
-
-## Variables the installer checks (and how to override them)
-
-The installer defines defaults in the script as `DEF_<NAME>` and then reads (sources) `installer.conf`. The following `DEF_*` variables are used by the shipped script and are safe to override in `installer.conf`:
-
-- `DEF_INSTALL_DIR` — default installation directory (default: `/opt/<project>`)
-- `DEF_SSH_ADDRESS` — default remote SSH address (default: empty)
-- `DEF_EXCLUDE_FILE` — default file containing patterns to ignore when copying files to installation directory (default: `.gitignore`)
-- `DEF_WITH_SYSTEMD` — whether to install systemd units by default (`true` or `false`)
-- `DEF_ENABLE_UNITS` — whether to enable & start units by default (`true` or `false`)
-
-Other useful variables that the script respects or that you may want to export for hooks:
-
-- `SSH_OPTS` — extra options passed to `ssh`/`rsync` (export or set before invoking the installer; the script reads `SSH_OPTS` via parameter expansion)
-- `RSYNC_OPTS` — extra options passed to `rsync` (export or set before invoking the installer; the script reads `RSYNC_OPTS` via parameter expansion)
 
 **Example `installer.conf`:**
 
 ```sh
 ## change the default installation dir
-#DEF_INSTALL_DIR="/srv/myproject"
+#INSTALL_DIR="/srv/myproject"
 ## change the default file with the patterns for files to be excluded when copying for installation
-#DEF_EXCLUDE_FILE="deployment/ignore"
+#EXCLUDE_FILE="deployment/ignore"
 ## disable automatic systemd installation by default
-#DEF_WITH_SYSTEMD=false
+#WITH_SYSTEMD=false
 ## keep units from being enabled automatically
-#DEF_ENABLE_UNITS=false
+#ENABLE_UNITS=false
 ## optionally set common SSH options for remote installs
 #SSH_OPTS='-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no'
 

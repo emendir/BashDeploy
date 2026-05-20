@@ -5,63 +5,51 @@ set -euo pipefail
 ##############################################
 # CONFIGURATION
 ##############################################
-SCRIPT_PATH=$(readlink -f "$0")
-SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
-PROJ_NAME=$(basename "$SCRIPT_DIR")
-DEPLOY_DIR="$SCRIPT_DIR/deployment"
-HOOKS_DIR="$DEPLOY_DIR/hooks"
-SYSTEMD_DIR="$DEPLOY_DIR/systemd_units"
+BASHDEPLOY_SCRIPT_PATH=$(readlink -f "$0")
+BASHDEPLOY_SCRIPT_DIR=$(dirname "$BASHDEPLOY_SCRIPT_PATH")
 
-# Default values (can be overridden by config or env)
-DEF_INSTALL_DIR="/opt/$PROJ_NAME"
-DEF_SSH_ADDRESS=""
-DEF_WITH_SYSTEMD=true
-DEF_ENABLE_UNITS=true
-DEF_EXCLUDE_FILE="$SCRIPT_DIR/.gitignore"
 
 # Load config file if present
-CONFIG_FILE="$SCRIPT_DIR/installer.conf"
+CONFIG_FILE="$BASHDEPLOY_SCRIPT_DIR/installer.conf"
 if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
 fi
 
-##############################################
-# HELPERS
-##############################################
-notify() {
-    local message="$1"
-    local color="${2:-}\033[0m"
-    echo -e "${color}==> ${message}\033[0m"
-}
-
-err() {
-    echo -e "\033[0;31mERROR: $*\033[0m" >&2
+cd "$BASHDEPLOY_SCRIPT_DIR"
+PROJECT_ROOT_DIR=${PROJECT_ROOT_DIR:-$BASHDEPLOY_SCRIPT_DIR}
+PROJECT_ROOT_DIR=$(readlink -f "$PROJECT_ROOT_DIR") # ensure absolute path
+if [ "${PROJECT_ROOT_DIR:?}" = "/" ];then
+    echo "Error: PROJECT_ROOT_DIR is set to '$PROJECT_ROOT_DIR'"
     exit 1
-}
+fi
+cd "$PROJECT_ROOT_DIR"
 
-run_hook_dir() {
-  local dir="$1"
-  if [[ -d "$dir" ]]; then
-    for script in "$dir"/*.sh; do
-      [[ -e "$script" ]] || continue
-      notify "Running hook: $(basename "$script")"
-      bash "$script"
-    done
-  fi
-}
+# Set configurations if not already defined in config file.
+# Paths are relative to PROJECT_ROOT_DIR.
+PROJECT_NAME=${PROJECT_NAME:-$(basename "$PROJECT_ROOT_DIR")}
+INSTALL_DIR=${INSTALL_DIR:-"/opt/$PROJECT_NAME"}
+DEPLOY_DIR=${DEPLOY_DIR:-"$PROJECT_ROOT_DIR/deployment"}
+HOOKS_DIR=${HOOKS_DIR:-"$DEPLOY_DIR/hooks"}
+SYSTEMD_DIR=${SYSTEMD_DIR:-"$DEPLOY_DIR/systemd_units"}
+WITH_SYSTEMD=${WITH_SYSTEMD:-true}
+ENABLE_UNITS=${ENABLE_UNITS:-true}
+
+SSH_ADDRESS=${SSH_ADDRESS:-""}
+SSH_OPTS="${SSH_OPTS:-}"
+RSYNC_OPTS="${RSYNC_OPTS:-"-h --info=progress2"}"
+COPY_ONLY="${COPY_ONLY:-}"
+EXCLUDE_FILE=${EXCLUDE_FILE:-"$PROJECT_ROOT_DIR/.gitignore"}
+
+
+# Path of this installer script relative to PROJECT_ROOT_DIR
+INSTALLER_PATH=$(realpath --relative-to="$PROJECT_ROOT_DIR" "$BASHDEPLOY_SCRIPT_PATH")
+
 
 ##############################################
 # ARGUMENT PARSING
 ##############################################
-SSH_ADDRESS="$DEF_SSH_ADDRESS"
-INSTALL_DIR="$DEF_INSTALL_DIR"
-WITH_SYSTEMD="$DEF_WITH_SYSTEMD"
-ENABLE_UNITS="$DEF_ENABLE_UNITS"
-SSH_OPTS="${SSH_OPTS:-}"
-RSYNC_OPTS="${RSYNC_OPTS:-}"
-COPY_ONLY="${COPY_ONLY:-}"
-EXCLUDE_FILE=$DEF_EXCLUDE_FILE
+
 usage() {
 cat <<EOF
 BashDeploy
@@ -70,11 +58,11 @@ Usage: $0 [OPTIONS]
 
 Options:
   --remote <user@host>   Install on remote machine via SSH
-  --dir <path>           Installation directory (default: $DEF_INSTALL_DIR)
-  --exclude-from <path>  Installation directory (default: $DEF_EXCLUDE_FILE)
-  --with-systemd         Install systemd units (default: $DEF_WITH_SYSTEMD)
+  --dir <path>           Installation directory (default: $INSTALL_DIR)
+  --exclude-from <path>  Installation directory (default: $EXCLUDE_FILE)
+  --with-systemd         Install systemd units (default: $WITH_SYSTEMD)
   --no-systemd           Skip systemd unit installation
-  --enable-units         Enable and start systemd units (default: $DEF_ENABLE_UNITS)
+  --enable-units         Enable and start systemd units (default: $ENABLE_UNITS)
   --no-enable-units      Do not enable/start units after install
   --only-copy            Only copy files to installation target, without running setup/installation scripts
   --help                 Show this help
@@ -109,10 +97,57 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-EXCLUDE_FILE=$(readlink -f $EXCLUDE_FILE)
-if ! [ -e $EXCLUDE_FILE ]; then
-  touch $EXCLUDE_FILE
+if ! [ -e "$EXCLUDE_FILE" ]; then
+  touch "$EXCLUDE_FILE"
 fi
+
+# export for availability to hooks
+export PROJECT_NAME
+export PROJECT_ROOT_DIR
+export INSTALL_DIR
+export DEPLOY_DIR
+export HOOKS_DIR
+export SYSTEMD_DIR
+export WITH_SYSTEMD
+export ENABLE_UNITS
+
+export SSH_ADDRESS
+export SSH_OPTS
+export RSYNC_OPTS
+export COPY_ONLY
+export EXCLUDE_FILE
+
+##############################################
+# HELPERS
+##############################################
+notify() {
+    local message="$1"
+    local def_color='\033[0;36m'
+    local color="${2:-$def_color}"
+    echo -e "${color}==> ${message}\033[0m"
+}
+
+warning() {
+    local message="$1"
+    local color="${2:-}\033[0;33m"
+    echo -e "${color}==> ${message}\033[0m"
+}
+
+err() {
+    echo -e "\033[0;31mERROR: $*\033[0m" >&2
+    exit 1
+}
+
+run_hook_dir() {
+  local dir="$1"
+  if [[ -d "$dir" ]]; then
+    for script in "$dir"/*.sh; do
+      [[ -e "$script" ]] || continue
+      notify "Running hook: $(basename "$script")"
+      bash "$script"
+    done
+  fi
+}
 
 ##############################################
 # REMOTE INSTALL HANDLING
@@ -121,16 +156,31 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   notify "Installing remotely on $SSH_ADDRESS"
 
   # Ensure target directory exists and is owned by the remote user
+  # shellcheck disable=SC2086
   ssh $SSH_OPTS "$SSH_ADDRESS" -t "sudo mkdir -p '$INSTALL_DIR' && sudo chown \$USER:\$USER '$INSTALL_DIR'"
 
+  echo "Copying from $PROJECT_ROOT_DIR to $SSH_ADDRESS:$INSTALL_DIR"
+  echo $EXCLUDE_FILE
   # Copy project files over
-  rsync -a $RSYNC_OPTS --delete --exclude-from=$EXCLUDE_FILE -e "ssh $SSH_OPTS" "$SCRIPT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
+  # shellcheck disable=SC2086
+  rsync -a --delete --exclude-from="$EXCLUDE_FILE" -e "ssh $SSH_OPTS" $RSYNC_OPTS "$PROJECT_ROOT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
 
   if [[ $COPY_ONLY != true ]];then
     # Re-run installer remotely
-    ssh $SSH_OPTS "$SSH_ADDRESS" -t "bash '$INSTALL_DIR/$(basename "$SCRIPT_PATH")' --dir '$INSTALL_DIR' \
+    # shellcheck disable=SC2086
+    ssh $SSH_OPTS "$SSH_ADDRESS" -t "
+      PROJECT_NAME=$PROJECT_NAME \
+      PROJECT_ROOT_DIR=$INSTALL_DIR \
+      INSTALL_DIR=$INSTALL_DIR \
+      DEPLOY_DIR=$DEPLOY_DIR \
+      HOOKS_DIR=$HOOKS_DIR \
+      SYSTEMD_DIR=$SYSTEMD_DIR \
+      WITH_SYSTEMD=$WITH_SYSTEMD \
+      ENABLE_UNITS=$ENABLE_UNITS \
+      bash '$INSTALL_DIR/$INSTALLER_PATH' --dir '$INSTALL_DIR' \
       $([[ $WITH_SYSTEMD == true ]] && echo --with-systemd || echo --no-systemd) \
-      $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units)"
+      $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units) \
+      "
     exit 0
   else
     notify "Not installing on remote machine because --copy-only is set."
@@ -141,9 +191,11 @@ fi
 ##############################################
 # LOCAL INSTALLATION
 ##############################################
-notify "Installing locally into $INSTALL_DIR"
+notify "Installing to $INSTALL_DIR"
 sudo mkdir -p "$INSTALL_DIR"
-sudo rsync -a $RSYNC_OPTS --delete --exclude-from=$EXCLUDE_FILE "$SCRIPT_DIR/" "$INSTALL_DIR/"
+# shellcheck disable=SC2086
+
+sudo rsync -a --delete --exclude-from=$EXCLUDE_FILE $RSYNC_OPTS "$PROJECT_ROOT_DIR/" "$INSTALL_DIR/"
 
 # Run post-copy hooks
 run_hook_dir "$HOOKS_DIR/post_copy.d"
@@ -152,7 +204,10 @@ run_hook_dir "$HOOKS_DIR/post_copy.d"
 ##############################################
 # SYSTEMD UNIT HANDLING
 ##############################################
-if ! [ -e $SYSTEMD_DIR ]; then
+if ! [ -e "$SYSTEMD_DIR" ]; then
+    if [[ "$WITH_SYSTEMD" == true ]]; then
+        warning "No systemd units folder found: $SYSTEMD_DIR"
+    fi
   WITH_SYSTEMD=false
 fi
 if [[ "$WITH_SYSTEMD" == true ]]; then
@@ -165,6 +220,7 @@ if [[ "$WITH_SYSTEMD" == true ]]; then
     for unit in "$UNIT_DIR"/*.{service,timer,socket,target,mount,automount,path,device,swap,slice,scope}; do
       [[ -e "$unit" ]] || continue
 
+      notify "- $(basename "$unit")"
       if [[ $scope == system ]]; then
         sudo cp "$unit" /etc/systemd/system/
       else

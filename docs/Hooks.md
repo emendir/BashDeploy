@@ -57,13 +57,18 @@ Hook files live under `deployment/hooks/` in the project tree.
 ## Environment available to hooks
 
 - Hooks are executed in a subshell invoked by the installer.
-- The installer export the following variables, whose values are determined by command line arguments or the configuration file.
+- The installer export the following variables, whose values are determined by command line arguments, the configuration file, or environment variables. Their values are as described in [Configuration](Configuration.md#Variables), with the exception that `PROJECT_ROOT_DIR` is exported as an absolute path.
 
 ```
-SSH_ADDRESS
+PROJECT_NAME
+PROJECT_ROOT_DIR
 INSTALL_DIR
+DEPLOY_DIR
+HOOKS_DIR
+SYSTEMD_DIR
 WITH_SYSTEMD
 ENABLE_UNITS
+SSH_ADDRESS
 SSH_OPTS
 RSYNC_OPTS
 COPY_ONLY

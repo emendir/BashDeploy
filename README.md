@@ -20,7 +20,7 @@ Depends only on `bash`, `rsync` and optionally `ssh` (for remote installs)
 ## Requirements & Compatibility
 
 - Linux OS (with extra features for systems running `systemd`)
-- `bash` and GNU `coreutils` (`readlink -f` is used)
+- `bash` and GNU `coreutils` (`readlink -f` & `realpath` are used)
 - `rsync`
 - `ssh` for remote installs.
 - `sudo` available for actions that require root.
@@ -46,6 +46,8 @@ In a full-blown setup with custom hooks, systemd units and an exclusion list, th
 ├── installer.conf
 └── .gitignore
 ```
+
+All these paths can be customised by configuring `installer.conf` (see [Configuration](./docs/Configuration.md)).
 
 ## Quick Start
 
@@ -81,7 +83,7 @@ In a full-blown setup with custom hooks, systemd units and an exclusion list, th
 ```
 --remote <user@host>     Install on remote machine via SSH
 --dir <path>             Installation directory (default: /opt/<project>)
---exclude-from <path>    Installation directory (default: $DEF_EXCLUDE_FILE)
+--exclude-from <path>    Installation directory (default: .gitignore)
 --with-systemd           Install systemd units (default: true)
 --no-systemd             Skip systemd unit installation
 --enable-units           Enable and start units after install (default: true)
