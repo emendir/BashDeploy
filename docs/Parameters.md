@@ -10,6 +10,7 @@ _This file documents every CLI option exposed by `install.sh`, explains defaults
 --no-systemd           Skip systemd unit installation
 --enable-units         Enable and start systemd units (default: true)
 --no-enable-units      Do not enable/start units after install
+--env KEY=VALUE        Extra env var exported to hooks and forwarded to remote (repeatable)
 --help                 Show this help
 ```
 
@@ -58,6 +59,15 @@ _This file documents every CLI option exposed by `install.sh`, explains defaults
 - **What they do:** If `WITH_SYSTEMD` is enabled, this controls whether the installer will run `systemctl enable --now` (system) and `systemctl --user enable --now` (user) for available `.service` and `.timer` units.
 - **Default:** `--enable-units` (unless overridden via `installer.conf` by changing `DEF_ENABLE_UNITS`).
 - **Notes:** Enabling and starting a unit that fails will cause the script to fail (because of `set -e`). If you want to install but not start services immediately, use `--no-enable-units`.
+
+### `--env KEY=VALUE`
+
+- **What it does:** Declares an extra environment variable to `export` for hooks (pre-copy on the source machine; post-copy and post-systemd on the install target) and to forward across the SSH boundary for remote installs.
+- **Repeatable:** pass `--env` multiple times to declare multiple variables.
+- **Quoting:** the value is forwarded with shell-safe quoting (`printf '%q'`), so spaces and special characters survive the SSH round-trip.
+- **Secrets:** to forward a value from the caller's current shell without putting it in a config file, use shell interpolation: `--env "DB_PASS=$DB_PASS"`.
+- **Precedence:** `--env` overrides the `USER_ENV` array in `installer.conf` on duplicate keys. See [Configuration](./Configuration.md#variables).
+- **Examples:** `--env DEPLOY_ENV=production --env "API_KEY=$API_KEY"`
 
 ### `--help`
 

@@ -68,6 +68,20 @@ make_project() {
         echo "touch /opt/$PROJECT_NAME/.hook_post_systemd_d" > "$dir/deployment/hooks/post_systemd.d/10_test.sh"
         chmod +x "$dir/deployment/hooks/post_systemd.d/10_test.sh"
         ;;
+      env-marker)
+        mkdir -p "$dir/deployment/hooks/post_copy.d"
+        cat > "$dir/deployment/hooks/post_copy.d/20-env-marker.sh" <<MARKER
+printf '%s' "\$DEPLOY_ENV" > "/opt/$PROJECT_NAME/.env_deploy"
+printf '%s' "\$API_KEY"   > "/opt/$PROJECT_NAME/.env_api_key"
+printf '%s' "\$FOO"       > "/opt/$PROJECT_NAME/.env_foo"
+MARKER
+        chmod +x "$dir/deployment/hooks/post_copy.d/20-env-marker.sh"
+        ;;
+      user-env-config)
+        cat > "$dir/installer.conf" <<'CONF'
+USER_ENV=("DEPLOY_ENV=should_be_overridden" "FOO=from_config")
+CONF
+        ;;
       user-unit)
         echo -e "[Unit]\nDescription=Demo user service\n[Service]\nExecStart=/bin/sh -c 'echo USER_SERVICE > /opt/$PROJECT_NAME/.user_service'\n[Install]\nWantedBy=default.target" > "$dir/deployment/systemd_units/user/demo-user.service"
         ;;
@@ -90,7 +104,8 @@ run_test() {
   cid=$(docker run -d --privileged --name $CONTAINER_NAME $IMAGE)
   docker cp "$tmpdir" "$cid:/root/$PROJECT_NAME"
 
-  docker exec "$cid" bash /root/$PROJECT_NAME/install.sh --dir /opt/$PROJECT_NAME --no-enable-units || { echo "Test $name FAILED (install error)"; docker rm -f $cid; return 1; }
+  # shellcheck disable=SC2086
+  docker exec "$cid" bash /root/$PROJECT_NAME/install.sh --dir /opt/$PROJECT_NAME --no-enable-units ${EXTRA_INSTALL_ARGS:-} || { echo "Test $name FAILED (install error)"; docker rm -f $cid; return 1; }
 
   # Basic check: project files copied
   docker exec "$cid" test -f /opt/$PROJECT_NAME/hello.sh
@@ -103,6 +118,16 @@ run_test() {
   [[ "$*" == *"post-systemd"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_systemd
   [[ "$*" == *"post-copy-d"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_copy_d
   [[ "$*" == *"post-systemd-d"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_systemd_d
+
+  # Env-forwarding checks
+  if [[ -n "${EXPECT_DEPLOY_ENV:-}" ]]; then
+    got=$(docker exec "$cid" cat /opt/$PROJECT_NAME/.env_deploy)
+    [[ "$got" == "$EXPECT_DEPLOY_ENV" ]] || { echo "Test $name FAILED: DEPLOY_ENV='$got' != '$EXPECT_DEPLOY_ENV'"; docker rm -f $cid; return 1; }
+  fi
+  if [[ -n "${EXPECT_FOO:-}" ]]; then
+    got=$(docker exec "$cid" cat /opt/$PROJECT_NAME/.env_foo)
+    [[ "$got" == "$EXPECT_FOO" ]] || { echo "Test $name FAILED: FOO='$got' != '$EXPECT_FOO'"; docker rm -f $cid; return 1; }
+  fi
 
   # Systemd checks
   if [[ "$*" == *"system-unit"* ]]; then
@@ -122,7 +147,7 @@ run_remote_test() {
   local tmpdir
   tmpdir=$(mktemp -d)
   echo $tmpdir
-  make_project "$tmpdir" "pre-copy" "post-copy"
+  make_project "$tmpdir" "pre-copy" "post-copy" "env-marker" "user-env-config"
 
   cid=$(docker run -d --privileged --name $CONTAINER_NAME $IMAGE)
   sleep 1
@@ -152,7 +177,9 @@ run_remote_test() {
   ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$cid")
 
   # Run remote install (password auth)
-  (cd "$tmpdir" && SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $privkey_file" bash install.sh --remote root@$ip --dir /opt/$PROJECT_NAME)
+  # --env DEPLOY_ENV overrides USER_ENV from installer.conf (CLI wins);
+  # --env API_KEY exercises shell-special characters surviving the SSH round-trip.
+  (cd "$tmpdir" && SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $privkey_file" bash install.sh --remote root@$ip --dir /opt/$PROJECT_NAME --env DEPLOY_ENV=production --env "API_KEY=has spaces & \$pecial")
 
   # Verify inside container
   docker exec "$cid" test -f /opt/$PROJECT_NAME/hello.sh
@@ -164,6 +191,16 @@ run_remote_test() {
   # cleanup pre-copy artifact left behind on the source machine
   rm -f "$tmpdir/.hook_pre_copy"
 
+  # CLI --env overrode installer.conf's USER_ENV for DEPLOY_ENV
+  got=$(docker exec "$cid" cat /opt/$PROJECT_NAME/.env_deploy)
+  [[ "$got" == "production" ]] || { echo "Remote test FAILED: DEPLOY_ENV='$got' != 'production'"; docker rm -f $cid; return 1; }
+  # FOO came only from the (forwarded) installer.conf USER_ENV
+  got=$(docker exec "$cid" cat /opt/$PROJECT_NAME/.env_foo)
+  [[ "$got" == "from_config" ]] || { echo "Remote test FAILED: FOO='$got' != 'from_config'"; docker rm -f $cid; return 1; }
+  # API_KEY survived quoting through the SSH boundary
+  got=$(docker exec "$cid" cat /opt/$PROJECT_NAME/.env_api_key)
+  [[ "$got" == 'has spaces & $pecial' ]] || { echo "Remote test FAILED: API_KEY='$got'"; docker rm -f $cid; return 1; }
+
   docker rm -f "$cid"
   echo "[+] Remote install test PASSED"
 }
@@ -173,6 +210,11 @@ run_test "no hooks or units"
 run_test "default hooks" pre-copy post-copy post-systemd
 run_test "hook directories" pre-copy pre-copy-d post-copy post-systemd  post-copy-d post-systemd-d
 run_test "user and system units" user-unit system-unit
+# Local install: --env on the CLI overrides USER_ENV from installer.conf,
+# and config-only keys (FOO) flow through unchanged.
+EXTRA_INSTALL_ARGS='--env DEPLOY_ENV=from_cli' \
+EXPECT_DEPLOY_ENV='from_cli' EXPECT_FOO='from_config' \
+  run_test "user env vars (config + CLI override)" env-marker user-env-config
 run_remote_test
 
 echo "[+] All tests finished"

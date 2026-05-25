@@ -92,6 +92,7 @@ All these paths can be customised by configuring `installer.conf` (see [Configur
 --no-systemd             Skip systemd unit installation
 --enable-units           Enable and start units after install (default: true)
 --no-enable-units        Do not enable/start units after install
+--env KEY=VALUE          Extra env var for hooks, forwarded to remote installs (repeatable)
 --help                   Show this help
 
 ```

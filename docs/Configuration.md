@@ -25,6 +25,7 @@ Config-File definitions take precedence over environment variables.
 - `ENABLE_UNITS` — whether to enable & start units by default (`true` or `false`)
 - `SSH_OPTS` — extra options passed to `ssh`/`rsync` (default: empty)
 - `RSYNC_OPTS` — extra options passed to `rsync`, in addition to `-a --delete --exclude-from=<EXCLUDE_FILE>` (default: `-h --info=progress2`)
+- `USER_ENV` — bash array of `"KEY=VALUE"` entries that are `export`ed for hooks and forwarded to remote re-executions. Only meaningful in `installer.conf` (arrays don't survive environment-variable export). CLI `--env KEY=VALUE` flags override entries with the same key. Example: `USER_ENV=("DEPLOY_ENV=production" "FEATURE_X=1")`
 
 ### Installer Configuration File
 
@@ -50,6 +51,8 @@ Add `installer.conf` to your project root, next to `install.sh`. The installer w
 #ENABLE_UNITS=false
 ## optionally set common SSH options for remote installs
 #SSH_OPTS='-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no'
+## extra env vars exported for hooks and forwarded over SSH for remote installs
+#USER_ENV=("DEPLOY_ENV=production" "FEATURE_X=1")
 
 ```
 

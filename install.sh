@@ -2,6 +2,11 @@
 ## BashDeploy: Generic project installer
 set -euo pipefail
 
+err() {
+    echo -e "\033[0;31mERROR: $*\033[0m" >&2
+    exit 1
+}
+
 ##############################################
 # CONFIGURATION
 ##############################################
@@ -14,6 +19,16 @@ CONFIG_FILE="$BASHDEPLOY_SCRIPT_DIR/installer.conf"
 if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
+fi
+
+# Merge user-defined env vars from config (USER_ENV array) into an internal
+# map. CLI --env flags below override config entries on duplicate keys.
+declare -A _USER_ENV_MAP=()
+if [[ -n "${USER_ENV+x}" ]]; then
+  for _pair in "${USER_ENV[@]}"; do
+    [[ "$_pair" == *"="* ]] || err "USER_ENV entry missing '=': $_pair"
+    _USER_ENV_MAP["${_pair%%=*}"]="${_pair#*=}"
+  done
 fi
 
 cd "$BASHDEPLOY_SCRIPT_DIR"
@@ -65,6 +80,7 @@ Options:
   --enable-units         Enable and start systemd units (default: $ENABLE_UNITS)
   --no-enable-units      Do not enable/start units after install
   --only-copy            Only copy files to installation target, without running setup/installation scripts
+  --env KEY=VALUE        Extra env var to export to hooks and forward to remote re-execution (repeatable)
   --help                 Show this help
 
 Find out more at:
@@ -90,6 +106,10 @@ while [[ $# -gt 0 ]]; do
       ENABLE_UNITS=false; shift;;
     --copy-only)
       COPY_ONLY=true; shift;;
+    --env)
+      [[ "${2:-}" == *"="* ]] || err "--env requires KEY=VALUE form, got: ${2:-}"
+      _USER_ENV_MAP["${2%%=*}"]="${2#*=}"
+      shift 2;;
     --help)
       usage; exit 0;;
     *)
@@ -117,6 +137,11 @@ export RSYNC_OPTS
 export COPY_ONLY
 export EXCLUDE_FILE
 
+# Export user-defined env vars so hooks (local and remote) see them
+for _k in "${!_USER_ENV_MAP[@]}"; do
+  export "$_k=${_USER_ENV_MAP[$_k]}"
+done
+
 ##############################################
 # HELPERS
 ##############################################
@@ -131,11 +156,6 @@ warning() {
     local message="$1"
     local color="${2:-}\033[0;33m"
     echo -e "${color}==> ${message}\033[0m"
-}
-
-err() {
-    echo -e "\033[0;31mERROR: $*\033[0m" >&2
-    exit 1
 }
 
 run_hook_dir() {
@@ -224,6 +244,13 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   rsync -a --delete --exclude-from="$EXCLUDE_FILE" -e "ssh $SSH_OPTS" $RSYNC_OPTS "$PROJECT_ROOT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
 
   if [[ $COPY_ONLY != true ]];then
+    # Forward user-defined env vars as --env KEY=VALUE args so the CLI-wins
+    # precedence is preserved over any USER_ENV in the remote's installer.conf.
+    USER_ENV_ARGS=""
+    for _k in "${!_USER_ENV_MAP[@]}"; do
+      USER_ENV_ARGS+=" --env $(printf '%q' "$_k=${_USER_ENV_MAP[$_k]}")"
+    done
+
     # Re-run installer remotely
     # shellcheck disable=SC2086
     ssh $SSH_OPTS "$SSH_ADDRESS" -t "
@@ -239,6 +266,7 @@ if [[ -n "$SSH_ADDRESS" ]]; then
       bash '$INSTALL_DIR/$INSTALLER_PATH' --dir '$INSTALL_DIR' \
       $([[ $WITH_SYSTEMD == true ]] && echo --with-systemd || echo --no-systemd) \
       $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units) \
+      $USER_ENV_ARGS \
       "
     exit 0
   else

@@ -93,6 +93,8 @@ COPY_ONLY
 EXCLUDE_FILE
 ```
 
+In addition, every key declared via `USER_ENV=(…)` in `installer.conf` or via `--env KEY=VALUE` on the command line is exported under its own name and is visible to every hook — including post-copy and post-systemd hooks on a remote target, where these vars are forwarded across the SSH boundary.
+
 ---
 
 ## Hook writing guidelines (best practices)
