@@ -149,6 +149,52 @@ run_hook_dir() {
   fi
 }
 
+assert_ssh_host_reachable() {
+    local ssh_target="$1"
+    local host
+
+    # Extract host from:
+    #   user@host
+    #   host
+    #   ssh://user@host:port
+    #   [IPv6]
+    #   user@[IPv6]
+    if [[ "$ssh_target" =~ ^ssh:// ]]; then
+        host="${ssh_target#ssh://}"
+        host="${host#*@}"
+        host="${host%%:*}"
+    else
+        host="${ssh_target#*@}"
+
+        # IPv6 in brackets
+        if [[ "$host" =~ ^\[.*\]$ ]]; then
+            host="${host#[}"
+            host="${host%]}"
+        else
+            # Strip :port for hostname / IPv4
+            host="${host%%:*}"
+        fi
+    fi
+
+    if [[ -z "$host" ]]; then
+        printf 'ERROR: could not parse host from "%s"\n' "$ssh_target" >&2
+        return 1
+    fi
+
+    # Check TCP reachability on SSH port without ping
+    if ! timeout 5 bash -c "exec 3<>/dev/tcp/$host/22" 2>/dev/null; then
+        printf 'ERROR: SSH host "%s" is unreachable on port 22\n' "$host" >&2
+        return 1
+    fi
+}
+
+##############################################
+# PRE-FLIGHT CHECKS
+##############################################
+if [[ -n "$SSH_ADDRESS" ]]; then
+  assert_ssh_host_reachable "$SSH_ADDRESS"
+fi
+
 ##############################################
 # PRE-COPY HOOKS (source machine only)
 ##############################################
