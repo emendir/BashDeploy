@@ -35,8 +35,10 @@ In a full-blown setup with custom hooks, systemd units and an exclusion list, th
 .
 ├── deployment/
 │   ├── hooks/
+│   │   ├── pre_copy.d/
 │   │   ├── post_copy.d/
 │   │   ├── post_systemd.d/
+│   │   ├── pre_copy.sh
 │   │   ├── post_copy.sh
 │   │   └── post_systemd.sh
 │   └── systemd_units/
@@ -62,10 +64,11 @@ All these paths can be customised by configuring `installer.conf` (see [Configur
 ./install.sh --dir /opt/MyProject
 ```
 
-1. copies project files to the specified directory (ignoring files from ignored patterns list file)
-2. runs `deployment/post_copy` scripts (if available)
-3. installs systemd units
-4. runs `deployment/post_systemd` scripts (if available)
+1. runs `deployment/pre_copy` scripts (if available)
+2. copies project files to the specified directory (ignoring files from ignored patterns list file)
+3. runs `deployment/post_copy` scripts (if available)
+4. installs systemd units
+5. runs `deployment/post_systemd` scripts (if available)
 
 ### Install Your Project on Remote Host
 
@@ -73,10 +76,11 @@ All these paths can be customised by configuring `installer.conf` (see [Configur
 ./install.sh --remote user@$IP_ADDR --dir /opt/MyProject
 ```
 
-1. copies project files to the specified directory on the remote machine (ignoring files from ignored patterns list file)
-2. runs `deployment/post_copy` scripts (if available)
-3. installs systemd units
-4. runs `deployment/post_systemd` scripts (if available)
+1. runs `deployment/pre_copy` scripts on the **source machine** (if available)
+2. copies project files to the specified directory on the remote machine (ignoring files from ignored patterns list file)
+3. runs `deployment/post_copy` scripts on the remote machine (if available)
+4. installs systemd units on the remote machine
+5. runs `deployment/post_systemd` scripts on the remote machine (if available)
 
 ## Common Options
 

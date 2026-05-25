@@ -2,18 +2,25 @@ _How to add custom installation scripts._
 
 ## Overview
 
-Hooks are the primary extension mechanism provided by the installer. Hooks let your project run arbitrary shell code at two lifecycle points:
+Hooks are the primary extension mechanism provided by the installer. Hooks let your project run arbitrary shell code at three lifecycle points:
 
+- **before the project files are copied** (pre-copy hooks),
 - **after the project files are copied** (post-copy hooks), and
 - **after systemd units have been installed and optionally enabled** (post-systemd hooks).
 
 Hook files live under `deployment/hooks/` in the project tree.
 
+> **Source-machine semantics for `pre_copy`:** when installing to a remote machine via SSH (`--remote`), pre-copy hooks run **only on the source machine** — before the project files are rsynced over. They are explicitly skipped during the remote re-execution of the installer.
+
 ---
 
 ## Hook locations and execution order
 
-- `deployment/hooks/post_copy.d/*.sh` — run first (alphabetical order according to glob expansion). Each file is executed with `bash "<script>"`.
+- `deployment/hooks/pre_copy.d/*.sh` — run before the project files are copied to the installation target (alphabetical order according to glob expansion). Each file is executed with `bash "<script>"`. For remote installs, these run on the source machine only.
+
+- `deployment/hooks/pre_copy.sh` — executed after the `pre_copy.d` directory scripts **but only if it is executable** (checked with `[[ -x ".../pre_copy.sh" ]]`). It is executed with `bash ".../pre_copy.sh"`. For remote installs, runs on the source machine only.
+
+- `deployment/hooks/post_copy.d/*.sh` — run after the project files have been copied (alphabetical order according to glob expansion). Each file is executed with `bash "<script>"`.
 
 - `deployment/hooks/post_copy.sh` — executed after the `post_copy.d` directory scripts **but only if it is executable** (checked with `[[ -x ".../post_copy.sh" ]]`). It is executed with `bash ".../post_copy.sh"`.
 
@@ -21,21 +28,32 @@ Hook files live under `deployment/hooks/` in the project tree.
 
 - `deployment/hooks/post_systemd.sh` — executed after `post_systemd.d` scripts if the file is executable.
 
-**Important differences:** files in `*.d/*.sh` are invoked by `bash "$script"` whether or not they have the executable bit set, because they are launched directly with `bash`. In contrast the single `post_* .sh` wrapper is run only if it is executable (the script checks `-x` before running it).
+**Important differences:** files in `*.d/*.sh` are invoked by `bash "$script"` whether or not they have the executable bit set, because they are launched directly with `bash`. In contrast the single `pre_copy.sh` / `post_copy.sh` / `post_systemd.sh` wrappers are run only if they are executable (the script checks `-x` before running them).
 
 ### Ordering example (the actual execution order)
 
-1. `deployment/hooks/post_copy.d/00-setup.sh`
-2. `deployment/hooks/post_copy.d/10-chown.sh`
-3. `deployment/hooks/post_copy.sh` (if executable)
-4. (systemd units copied, daemon reload, units enabled/started if requested)
-5. `deployment/hooks/post_systemd.d/00-wait-for-service.sh`
-6. `deployment/hooks/post_systemd.d/10-db-migrate.sh`
-7. `deployment/hooks/post_systemd.sh` (if executable)
+1. `deployment/hooks/pre_copy.d/00-build-assets.sh`
+2. `deployment/hooks/pre_copy.d/10-render-config.sh`
+3. `deployment/hooks/pre_copy.sh` (if executable)
+4. (project files copied to `$INSTALL_DIR`)
+5. `deployment/hooks/post_copy.d/00-setup.sh`
+6. `deployment/hooks/post_copy.d/10-chown.sh`
+7. `deployment/hooks/post_copy.sh` (if executable)
+8. (systemd units copied, daemon reload, units enabled/started if requested)
+9. `deployment/hooks/post_systemd.d/00-wait-for-service.sh`
+10. `deployment/hooks/post_systemd.d/10-db-migrate.sh`
+11. `deployment/hooks/post_systemd.sh` (if executable)
 
 ---
 
 ## What hooks should do — recommended responsibilities
+
+**Pre-copy hooks** typically perform tasks that prepare the source tree before it is shipped to the installation target, for example:
+
+- build or compile artifacts that should ship with the project (assets, binaries, generated config)
+- render templates or fetch upstream dependencies into the source tree so rsync picks them up
+- run source-side validation (lint, schema checks) before anything is copied
+- for remote installs: gather host-local secrets or credentials that need to be embedded before transfer
 
 **Post-copy hooks** typically perform tasks that prepare the freshly copied project for runtime, for example:
 

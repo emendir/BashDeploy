@@ -150,6 +150,18 @@ run_hook_dir() {
 }
 
 ##############################################
+# PRE-COPY HOOKS (source machine only)
+##############################################
+# Pre-copy hooks always execute on the source machine, before any files are
+# copied to the installation target. For remote installs they run locally,
+# before the rsync over SSH; the remote re-execution sets
+# BASHDEPLOY_SKIP_PRE_COPY=true to ensure they are not run again on the target.
+if [[ "${BASHDEPLOY_SKIP_PRE_COPY:-}" != true ]]; then
+  run_hook_dir "$HOOKS_DIR/pre_copy.d"
+  [[ -x "$HOOKS_DIR/pre_copy.sh" ]] && bash "$HOOKS_DIR/pre_copy.sh"
+fi
+
+##############################################
 # REMOTE INSTALL HANDLING
 ##############################################
 if [[ -n "$SSH_ADDRESS" ]]; then
@@ -169,6 +181,7 @@ if [[ -n "$SSH_ADDRESS" ]]; then
     # Re-run installer remotely
     # shellcheck disable=SC2086
     ssh $SSH_OPTS "$SSH_ADDRESS" -t "
+      BASHDEPLOY_SKIP_PRE_COPY=true \
       PROJECT_NAME=$PROJECT_NAME \
       PROJECT_ROOT_DIR=$INSTALL_DIR \
       INSTALL_DIR=$INSTALL_DIR \

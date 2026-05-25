@@ -41,6 +41,15 @@ make_project() {
   # Hooks / systemd depending on args
   for f in "$@"; do
     case $f in
+      pre-copy)
+        echo 'touch "$PROJECT_ROOT_DIR/.hook_pre_copy"' > "$dir/deployment/hooks/pre_copy.sh"
+        chmod +x "$dir/deployment/hooks/pre_copy.sh"
+        ;;
+      pre-copy-d)
+        mkdir -p "$dir/deployment/hooks/pre_copy.d"
+        echo 'touch "$PROJECT_ROOT_DIR/.hook_pre_copy_d"' > "$dir/deployment/hooks/pre_copy.d/10_test.sh"
+        chmod +x "$dir/deployment/hooks/pre_copy.d/10_test.sh"
+        ;;
       post-copy)
         echo "touch /opt/$PROJECT_NAME/.hook_post_copy" > "$dir/deployment/hooks/post_copy.sh"
         chmod +x "$dir/deployment/hooks/post_copy.sh"
@@ -88,6 +97,8 @@ run_test() {
   docker exec "$cid" test -f /opt/$PROJECT_NAME/data.txt
 
   # Hook checks
+  [[ "$*" == *"pre-copy"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_pre_copy
+  [[ "$*" == *"pre-copy-d"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_pre_copy_d
   [[ "$*" == *"post-copy"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_copy
   [[ "$*" == *"post-systemd"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_systemd
   [[ "$*" == *"post-copy-d"* ]] && docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_copy_d
@@ -111,7 +122,7 @@ run_remote_test() {
   local tmpdir
   tmpdir=$(mktemp -d)
   echo $tmpdir
-  make_project "$tmpdir" "post-copy"
+  make_project "$tmpdir" "pre-copy" "post-copy"
 
   cid=$(docker run -d --privileged --name $CONTAINER_NAME $IMAGE)
   sleep 1
@@ -145,9 +156,13 @@ run_remote_test() {
 
   # Verify inside container
   docker exec "$cid" test -f /opt/$PROJECT_NAME/hello.sh
-  
+
   docker exec "$cid" test -f /opt/$PROJECT_NAME/data.txt
   docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_post_copy
+  # pre-copy ran on the source machine and the artifact was rsynced over
+  docker exec "$cid" test -f /opt/$PROJECT_NAME/.hook_pre_copy
+  # cleanup pre-copy artifact left behind on the source machine
+  rm -f "$tmpdir/.hook_pre_copy"
 
   docker rm -f "$cid"
   echo "[+] Remote install test PASSED"
@@ -155,8 +170,8 @@ run_remote_test() {
 
 ### RUN ALL TESTS
 run_test "no hooks or units"
-run_test "default hooks" post-copy post-systemd
-run_test "hook directories" post-copy post-systemd  post-copy-d post-systemd-d
+run_test "default hooks" pre-copy post-copy post-systemd
+run_test "hook directories" pre-copy pre-copy-d post-copy post-systemd  post-copy-d post-systemd-d
 run_test "user and system units" user-unit system-unit
 run_remote_test
 
