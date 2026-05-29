@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 ## BashDeploy: Generic project installer
+##
+## Drop this script into the root of your project. Running it rsyncs the
+## project into a deployment directory (locally or over SSH), installs any
+## systemd units it finds, and runs your hook scripts.
+##
+## Quick start:
+##   ./install.sh                       Install locally (default: /opt/<project>)
+##   ./install.sh --remote user@host    Install on a remote machine via SSH
+##   ./install.sh --dir /srv/myapp      Install to a custom directory
+##   ./install.sh --help                List all options
+##
+## Optional layout (all paths configurable, see installer.conf):
+##   deployment/hooks/         pre_copy / post_copy / post_systemd hook scripts
+##   deployment/systemd_units/ system/ and user/ unit files to install
+##   installer.conf            override defaults (INSTALL_DIR, hooks, etc.)
+##
+## More details: https://github.com/emendir/BashDeploy
+
 set -euo pipefail
 
 err() {
@@ -238,7 +256,7 @@ if [[ -n "$SSH_ADDRESS" ]]; then
   ssh $SSH_OPTS "$SSH_ADDRESS" -t "sudo mkdir -p '$INSTALL_DIR' && sudo chown \$USER:\$USER '$INSTALL_DIR'"
 
   echo "Copying from $PROJECT_ROOT_DIR to $SSH_ADDRESS:$INSTALL_DIR"
-  echo $EXCLUDE_FILE
+
   # Copy project files over
   # shellcheck disable=SC2086
   rsync -a --delete --exclude-from="$EXCLUDE_FILE" -e "ssh $SSH_OPTS" $RSYNC_OPTS "$PROJECT_ROOT_DIR/" "$SSH_ADDRESS:$INSTALL_DIR/"
