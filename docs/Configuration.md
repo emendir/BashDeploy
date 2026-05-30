@@ -12,11 +12,12 @@ Parameters can be specified via variables in `installer.conf`, environment varia
 
 The following variables can be defined as environment variables or in the config-file.
 Config-File definitions take precedence over environment variables.
+Except for `PROJECT_ROOT_DIR`, all paths should be relative to `PROJECT_ROOT_DIR`.
 
 - `PROJECT_ROOT_DIR` — the root path of the project directory relative to the BashDeploy installer script
 - `PROJECT_NAME` — project name, for computing default install directory (default: the project's root directory's name)
 - `INSTALL_DIR` — installation directory (default: `/opt/<PROJECT_NAME>`)
-- `DEPLOY_DIR` — directory to look for `hooks` and `systemd_units` folders (defail: `./deployment`)
+- `DEPLOY_DIR` — directory to look for `hooks` and `systemd_units` folders (default: `./deployment`)
 - `HOOKS_DIR` — directory containing scripts to execute during installation (see [Hooks](./Hooks.md)) (default: `<DEPLOY_DIR>/hooks`)
 - `SYSTEMD_DIR` — directory containing Systemd units (see [SystemdUnits](./SystemdUnits)) (default: `<DEPLOY_DIR>/systemd`)
 - `SSH_ADDRESS` — default remote SSH address (default: empty)
