@@ -285,6 +285,7 @@ if [[ -n "$SSH_ADDRESS" ]]; then
       $([[ $WITH_SYSTEMD == true ]] && echo --with-systemd || echo --no-systemd) \
       $([[ $ENABLE_UNITS == true ]] && echo --enable-units || echo --no-enable-units) \
       $USER_ENV_ARGS \
+      --remote '' \
       "
     exit 0
   else
