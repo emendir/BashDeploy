@@ -26,7 +26,7 @@ The script has five sequential phases, all in one file:
 
 4. **Copy + post-copy hooks**. `sudo rsync -a --delete --exclude-from=$EXCLUDE_FILE` from `$PROJECT_ROOT_DIR` to `$INSTALL_DIR`, then `run_hook_dir "$HOOKS_DIR/post_copy.d"` followed by `post_copy.sh` (only if executable).
 
-5. **Systemd + post-systemd hooks**. Iterates `system/` and `user/` subdirs of `$SYSTEMD_DIR`, copies each known unit type (the literal glob `*.{service,timer,socket,target,mount,automount,path,device,swap,slice,scope}` in `install.sh:220`), runs `sudo systemctl daemon-reload`, optionally enables/starts `.service` and `.timer` units, then runs post-systemd hooks.
+5. **Systemd + post-systemd hooks**. Iterates `system/` and `user/` subdirs of `$SYSTEMD_DIR`, and for each known unit type (the literal glob `*.{service,timer,socket,target,mount,automount,path,device,swap,slice,scope}`) renders the unit via `render_unit` — substituting `{{VAR}}` placeholders with the values of exported environment variables (aborts if a referenced var is unset) — and writes the result to `/etc/systemd/system/` or `~/.config/systemd/user/` (the source file in the tree is never modified). Then runs `sudo systemctl daemon-reload`, optionally enables/starts `.service` and `.timer` units, then runs post-systemd hooks.
 
 ### Things that bite
 

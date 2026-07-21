@@ -26,17 +26,17 @@ All you have to do is define your systemd units and put them in one of the follo
 
 ## What the installer does with unit files
 
-1. For each unit file in `deployment/systemd_units/system/`, the installer runs
+1. For each unit file in `deployment/systemd_units/system/`, the installer renders any [`{{VAR}}` placeholders](#variable-substitution) and writes the result to `/etc/systemd/system/`:
 
     ```sh
-    sudo cp "$unit" /etc/systemd/system/
+    render_unit "$unit" | sudo tee "/etc/systemd/system/$(basename "$unit")" >/dev/null
     ```
 
-2. For each unit file in `deployment/systemd_units/user/`, the installer runs
+2. For each unit file in `deployment/systemd_units/user/`, the installer renders placeholders and writes the result to the user unit directory:
 
     ```sh
     mkdir -p "$HOME/.config/systemd/user"
-    cp "$unit" "$HOME/.config/systemd/user/"
+    render_unit "$unit" > "$HOME/.config/systemd/user/$(basename "$unit")"
     ```
 
     (No `sudo` is used for user units.)
@@ -47,6 +47,33 @@ All you have to do is define your systemd units and put them in one of the follo
     - user scope: `systemctl --user enable --now <unit-file-name>`
 
 5. Finally, post-systemd hooks are executed.
+
+---
+
+## Variable substitution
+
+Unit files may contain `{{VAR}}` placeholders.
+During installation the installer replaces each `{{VAR}}` with the value of the environment variable `VAR` before writing the unit to its destination.
+This lets you keep unit files deployment-agnostic instead of hardcoding absolute paths and other per-deployment values.
+
+```ini
+[Service]
+WorkingDirectory={{INSTALL_DIR}}
+ExecStart={{INSTALL_DIR}}/bin/serve --port {{APP_PORT}}
+Environment=DB_URL={{DATABASE_URL}}
+```
+
+- **Syntax:** `{{NAME}}`, where `NAME` is a shell-style identifier (letters, digits, underscores; not starting with a digit).
+  This syntax has no meaning in systemd's own unit-file grammar, so it will never collide with `%`-specifiers (`%h`, `%i`, …) or `$`/`${}` expansions.
+- **Available variables:** any environment variable exported to the installer.
+  This includes the installer's own settings (`INSTALL_DIR`, `PROJECT_NAME`, `DEPLOY_DIR`, …) and any variables you define with `USER_ENV` in `installer.conf` or `--env KEY=VALUE` on the command line.
+  See [Configuration](./Configuration.md) and [Parameters](./Parameters.md).
+- **Unset variables abort the install.** If a unit references `{{VAR}}` but `VAR` is not set, the installer stops with an error such as `Unit myproject.service references {{APP_PORT}} but environment variable 'APP_PORT' is not set` and the unit is not written. A partially-substituted unit can never reach systemd.
+  Use a set-but-empty value (e.g. `--env APP_PORT=`) if you want an intentional blank.
+- **The source file is never modified** — rendering happens on the way to the install destination, so the `{{VAR}}` tokens remain in your project tree.
+- **Remote installs:** substitution runs on the target machine.
+  Only variables present in the _remote_ installer's environment are available there — the forwarded `USER_ENV`/`--env` values, anything in the remote `installer.conf`, and the remote shell's own environment.
+  Arbitrary local shell variables are **not** forwarded, so declare anything a remote unit needs via `USER_ENV`/`--env`.
 
 ---
 
@@ -62,7 +89,7 @@ All you have to do is define your systemd units and put them in one of the follo
 
 ## Writing unit files that work well with the installer
 
-- Use **absolute paths** in `ExecStart=` pointing into the final `$INSTALL_DIR` (for example `/opt/MyProject/bin/serve`). The installer does not rewrite unit files.
+- Use **absolute paths** in `ExecStart=` pointing into the final `$INSTALL_DIR`. Rather than hardcoding the directory, use the `{{INSTALL_DIR}}` placeholder (see [Variable substitution](#variable-substitution)) so the unit follows `--dir`/`INSTALL_DIR` automatically, for example `ExecStart={{INSTALL_DIR}}/bin/serve`.
 - Avoid assuming `ExecStart` will be run as a certain user — set `User=` in the `[Service]` block if you need a system unit to run as a specific user.
 - For user units, do not set `User=` — they run as the owning user.
 - For services that must start at boot, include the appropriate `WantedBy=` (for example `WantedBy=multi-user.target`) in the `[Install]` section.
@@ -77,8 +104,8 @@ After=network.target
 [Service]
 Type=simple
 User=myappuser
-WorkingDirectory=/opt/MyProject
-ExecStart=/opt/MyProject/bin/myproject serve
+WorkingDirectory={{INSTALL_DIR}}
+ExecStart={{INSTALL_DIR}}/bin/myproject serve
 Restart=on-failure
 
 [Install]

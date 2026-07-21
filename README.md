@@ -13,6 +13,7 @@ Depends only on `bash`, `rsync` and optionally `ssh` (for remote installs)
 - Local or remote installation over SSH
 - Copying of full source code for installation
 - OPTIONAL Automatic systemd unit installation (services, timers, etc.)
+- OPTIONAL `{{VAR}}` environment-variable substitution in systemd unit files
 - OPTIONAL Hooks for user-defined setup scripts
 - Customisable default options, hook paths and systemd unit paths
 - All in a **single Bash script**, with no dependencies beyond `ssh`, `rsync`, and `systemd`.

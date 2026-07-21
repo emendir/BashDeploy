@@ -28,6 +28,15 @@ Except for `PROJECT_ROOT_DIR`, all paths should be relative to `PROJECT_ROOT_DIR
 - `RSYNC_OPTS` — extra options passed to `rsync`, in addition to `-a --delete --exclude-from=<EXCLUDE_FILE>` (default: `-h --info=progress2`)
 - `USER_ENV` — bash array of `"KEY=VALUE"` entries that are `export`ed for hooks and forwarded to remote re-executions. Only meaningful in `installer.conf` (arrays don't survive environment-variable export). CLI `--env KEY=VALUE` flags override entries with the same key. Example: `USER_ENV=("DEPLOY_ENV=production" "FEATURE_X=1")`
 
+### Variable Substitution in Systemd Units
+
+Any environment variable exported to the installer — the settings above (e.g. `INSTALL_DIR`, `PROJECT_NAME`) plus anything you declare via `USER_ENV` or `--env` — can be referenced inside systemd unit files as a `{{VAR}}` placeholder.
+The installer substitutes these at install time and aborts if a referenced variable is unset.
+See [SystemdUnits](./SystemdUnits.md#variable-substitution) for the full behavior.
+
+**Remote caveat:** substitution runs on the target machine, so only variables present in the _remote_ installer's environment are available there — forwarded `USER_ENV`/`--env` values, the remote `installer.conf`, and the remote shell's environment.
+Declare anything a remote unit needs via `USER_ENV`/`--env`; arbitrary local shell variables are not forwarded.
+
 ### Installer Configuration File
 
 `installer.conf` allows you to configure the installer's defaults on a per-project basis.
@@ -59,7 +68,7 @@ Add `installer.conf` to your project root, next to `install.sh`. The installer w
 
 > Tip: keep `installer.conf` small and declarative — set defaults and `export` values that hooks will need. Because it is sourced, any shell code is allowed but that also makes it a potential attack vector.
 
-## Security checklist for configuration
+## Security Checklist for Configuration
 
 - Confirm `installer.conf` and all hook scripts are audited before running installer.
 - Avoid embedding secrets inside `installer.conf` (or ensure `installer.conf` is stored & distributed securely). Prefer to read sensitive values from a secrets manager in hooks.

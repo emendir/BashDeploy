@@ -187,6 +187,38 @@ run_hook_dir() {
   fi
 }
 
+# Render a unit file to stdout, replacing {{VAR}} placeholders with the values
+# of environment variables. Aborts if any referenced variable is unset, so a
+# partially-substituted unit can never be installed. The source file is never
+# modified.
+render_unit() {
+  local src="$1"
+  local content token var tokens
+  content=$(<"$src")
+
+  # Unique {{NAME}} tokens, NAME restricted to shell-identifier chars.
+  tokens=$(grep -oE '\{\{[A-Za-z_][A-Za-z0-9_]*\}\}' "$src" | sort -u || true)
+
+  while IFS= read -r token; do
+    [[ -n "$token" ]] || continue
+    var="${token#\{\{}"; var="${var%\}\}}"
+    if [[ -z "${!var+x}" ]]; then
+      err "Unit $(basename "$src") references $token but environment variable '$var' is not set"
+    fi
+    # Split/join instead of ${content//..} so the value is inserted literally:
+    # bash 5.2's patsub_replacement would otherwise treat '&' in the value as
+    # the matched text.
+    local rest="$content" out=""
+    while [[ "$rest" == *"$token"* ]]; do
+      out+="${rest%%"$token"*}${!var}"
+      rest="${rest#*"$token"}"
+    done
+    content="$out$rest"
+  done <<< "$tokens"
+
+  printf '%s\n' "$content"
+}
+
 assert_ssh_host_reachable() {
     local ssh_target="$1"
     local host
@@ -328,10 +360,10 @@ if [[ "$WITH_SYSTEMD" == true ]]; then
 
       notify "- $(basename "$unit")"
       if [[ $scope == system ]]; then
-        sudo cp "$unit" /etc/systemd/system/
+        render_unit "$unit" | sudo tee "/etc/systemd/system/$(basename "$unit")" >/dev/null
       else
         mkdir -p "$HOME/.config/systemd/user"
-        cp "$unit" "$HOME/.config/systemd/user/"
+        render_unit "$unit" > "$HOME/.config/systemd/user/$(basename "$unit")"
       fi
     done
   done
